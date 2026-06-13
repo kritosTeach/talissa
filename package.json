@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -13,9 +13,8 @@
   "dependencies": {
     "express": "^5.2.1",
     "socket.io": "^4.8.3"
-  }
-  ,
-  "scripts": {
-    "start": "node server.js"
+  },
+  "devDependencies": {
+    "@flydotio/dockerfile": "^0.7.10"
   }
 }
